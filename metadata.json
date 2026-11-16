@@ -1,0 +1,6 @@
+{
+  "name": "TagAudit — Tracking & Measurement Workbench",
+  "description": "Conversion tracking architecture, GTM container auditing, GA4/Meta CAPI deduplication testing, Consent Mode v2 verification, and cross-platform attribution reconciliation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
