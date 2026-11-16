@@ -60,6 +60,27 @@ export interface TaxonomyVisualSchema {
   mermaidDiagram: string;
   markdownDoc: string;
   svgDiagram: string;
+  jsonSchema: string;
+}
+
+export interface TaxonomyJsonSchemaDocument {
+  $schema: string;
+  $id: string;
+  title: string;
+  description: string;
+  type: 'object';
+  oneOf: Array<{ $ref: string }>;
+  $defs: {
+    parameters: Record<string, Record<string, unknown>>;
+    events: Record<string, Record<string, unknown>>;
+  };
+  'x-taxonomy-metadata': {
+    generatedAt: string;
+    eventCount: number;
+    uniqueParameterCount: number;
+    missingDependencyLinks: number;
+    parameterDependencies: ParameterDependencySpec[];
+  };
 }
 
 const STAGE_ORDER: FunnelStage[] = [
@@ -223,6 +244,207 @@ function escapeXml(raw: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function buildJsonSchemaParamDef(
+  paramName: string,
+  meta: ParamMetadata
+): Record<string, unknown> {
+  if (paramName === 'value') {
+    return {
+      type: 'number',
+      minimum: 0,
+      description: meta.documentationRule,
+    };
+  }
+  if (paramName === 'currency') {
+    return {
+      type: 'string',
+      pattern: '^[A-Z]{3}$',
+      description: meta.documentationRule,
+    };
+  }
+  if (paramName === 'items') {
+    return {
+      type: 'array',
+      minItems: 1,
+      description: meta.documentationRule,
+      items: {
+        type: 'object',
+        required: ['item_id', 'item_name'],
+        properties: {
+          item_id: { type: 'string', minLength: 1 },
+          item_name: { type: 'string', minLength: 1 },
+          price: { type: 'number', minimum: 0 },
+          quantity: { type: 'integer', minimum: 1 },
+        },
+      },
+    };
+  }
+  if (paramName === 'user_data') {
+    return {
+      type: 'object',
+      description: meta.documentationRule,
+      properties: {
+        sha256_email_address: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+        sha256_phone_number: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+      },
+    };
+  }
+  if (paramName === 'email_sha256') {
+    return {
+      type: 'string',
+      pattern: '^[a-f0-9]{64}$',
+      description: meta.documentationRule,
+    };
+  }
+  if (paramName === 'gclid') {
+    return {
+      type: 'string',
+      pattern: '^[A-Za-z0-9_-]{15,}$',
+      description: meta.documentationRule,
+    };
+  }
+  if (paramName === 'conversion_time') {
+    return {
+      type: 'string',
+      format: 'date-time',
+      description: meta.documentationRule,
+    };
+  }
+  if (paramName === 'fbp' || paramName === 'fbc') {
+    return {
+      type: 'string',
+      pattern: '^fb\\.\\d+\\.\\d+\\.[A-Za-z0-9_-]+$',
+      description: meta.documentationRule,
+    };
+  }
+  return {
+    type: 'string',
+    minLength: 1,
+    description: meta.documentationRule,
+  };
+}
+
+export function generateTaxonomyJsonSchema(
+  events: TaxonomyEvent[],
+  options?: { title?: string; strictMode?: boolean }
+): TaxonomyJsonSchemaDocument {
+  const generatedAt = new Date().toISOString();
+  const strictMode = Boolean(options?.strictMode);
+  const sortedEvents = [...events].sort((a, b) => {
+    const stageDiff = STAGE_ORDER.indexOf(a.funnelStage) - STAGE_ORDER.indexOf(b.funnelStage);
+    if (stageDiff !== 0) return stageDiff;
+    return a.eventName.localeCompare(b.eventName);
+  });
+
+  const paramToEvents = new Map<string, TaxonomyEvent[]>();
+  for (const ev of sortedEvents) {
+    for (const param of ev.requiredParams) {
+      const list = paramToEvents.get(param) || [];
+      list.push(ev);
+      paramToEvents.set(param, list);
+    }
+  }
+
+  const parameterDefs: Record<string, Record<string, unknown>> = {};
+  const parameterDependencies: ParameterDependencySpec[] = [];
+
+  for (const [paramName, evList] of Array.from(paramToEvents.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const meta = inferParamMeta(paramName, evList);
+    const activePlatforms = Array.from(new Set(evList.flatMap((e) => e.platforms)));
+    const downstreamPlatforms = meta.platformHints.filter((p) =>
+      activePlatforms.includes(p as TaxonomyEvent['platforms'][number])
+    );
+
+    parameterDefs[paramName] = buildJsonSchemaParamDef(paramName, meta);
+    parameterDependencies.push({
+      name: paramName,
+      dataType: meta.dataType,
+      category: meta.category,
+      downstreamPlatforms:
+        downstreamPlatforms.length > 0 ? downstreamPlatforms : activePlatforms,
+      requiredByEvents: evList.map((e) => e.eventName),
+      missingInEvents: evList
+        .filter((e) => !e.presentParams.includes(paramName))
+        .map((e) => e.eventName),
+      dependsOnParams: meta.dependsOnParams.filter((dep) => paramToEvents.has(dep)),
+      documentationRule: meta.documentationRule,
+    });
+  }
+
+  let missingDependencyLinks = 0;
+  const eventDefs: Record<string, Record<string, unknown>> = {};
+
+  for (const ev of sortedEvents) {
+    const missingParams = ev.requiredParams.filter((p) => !ev.presentParams.includes(p));
+    missingDependencyLinks += missingParams.length;
+
+    const eventProps: Record<string, unknown> = {
+      event: { const: ev.eventName },
+    };
+    const dependentRequired: Record<string, string[]> = {};
+
+    for (const paramName of ev.requiredParams) {
+      eventProps[paramName] = { $ref: `#/$defs/parameters/${paramName}` };
+      const paramMeta = KNOWN_PARAM_META[paramName];
+      if (paramMeta && paramMeta.dependsOnParams.length > 0) {
+        const depsInEvent = paramMeta.dependsOnParams.filter(
+          (d) => ev.requiredParams.includes(d) || paramToEvents.has(d)
+        );
+        if (depsInEvent.length > 0) {
+          dependentRequired[paramName] = depsInEvent;
+        }
+      }
+    }
+
+    const def: Record<string, unknown> = {
+      type: 'object',
+      description: ev.notes,
+      additionalProperties: !strictMode,
+      required: ['event', ...ev.requiredParams],
+      properties: eventProps,
+      'x-measurement-spec': {
+        funnelStage: ev.funnelStage,
+        platforms: ev.platforms,
+        googleAdsRole: ev.googleAdsRole,
+        attributionModel: ev.attributionModel,
+        enhancedConversions: ev.enhancedConversions,
+        capiDedupEnabled: ev.capiDedupEnabled,
+        presentParams: ev.presentParams,
+        missingParams,
+        monthlyVolume: ev.monthlyVolume,
+      },
+    };
+
+    if (Object.keys(dependentRequired).length > 0) {
+      def.dependentRequired = dependentRequired;
+    }
+
+    eventDefs[ev.eventName] = def;
+  }
+
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'https://tagaudit.schema/ga4-event-taxonomy.schema.json',
+    title: options?.title || 'GA4 Event Taxonomy & Parameter Dependency Schema',
+    description: `Draft 2020-12 JSON Schema for ${sortedEvents.length} GA4 events and ${parameterDependencies.length} required parameter dependencies.`,
+    type: 'object',
+    oneOf: sortedEvents.map((ev) => ({ $ref: `#/$defs/events/${ev.eventName}` })),
+    $defs: {
+      parameters: parameterDefs,
+      events: eventDefs,
+    },
+    'x-taxonomy-metadata': {
+      generatedAt,
+      eventCount: sortedEvents.length,
+      uniqueParameterCount: parameterDependencies.length,
+      missingDependencyLinks,
+      parameterDependencies,
+    },
+  };
 }
 
 export function generateTaxonomyVisualSchema(
@@ -599,6 +821,7 @@ export function generateTaxonomyVisualSchema(
 
   svgParts.push('</svg>');
   const svgDiagram = svgParts.join('\n');
+  const jsonSchema = JSON.stringify(generateTaxonomyJsonSchema(sortedEvents), null, 2);
 
   return {
     generatedAt,
@@ -612,5 +835,6 @@ export function generateTaxonomyVisualSchema(
     mermaidDiagram,
     markdownDoc,
     svgDiagram,
+    jsonSchema,
   };
 }

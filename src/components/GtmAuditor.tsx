@@ -16,6 +16,8 @@ import {
 } from '../types/tracking';
 import { validateGtmJsonInput } from '../utils/gtmAnalyzer';
 import { TriggerFiringMonitor } from './TriggerFiringMonitor';
+import { ImplementationScraper } from './ImplementationScraper';
+import { ContainerVersionDiff } from './ContainerVersionDiff';
 
 interface GtmAuditorProps {
   container: GtmExportJson;
@@ -26,7 +28,14 @@ interface GtmAuditorProps {
   onPatchContainer: () => void;
 }
 
-type GtmSubTab = 'findings' | 'tags' | 'triggers' | 'variables' | 'monitor';
+type GtmSubTab =
+  | 'findings'
+  | 'tags'
+  | 'triggers'
+  | 'variables'
+  | 'monitor'
+  | 'scraper'
+  | 'diff';
 
 export const GtmAuditor: React.FC<GtmAuditorProps> = ({
   container,
@@ -215,6 +224,8 @@ export const GtmAuditor: React.FC<GtmAuditorProps> = ({
               { id: 'triggers', label: `Triggers (${cv.trigger.length})` },
               { id: 'variables', label: `Variables (${cv.variable.length})` },
               { id: 'monitor', label: 'Trigger Firing Monitor' },
+              { id: 'scraper', label: 'Implementation Scraper' },
+              { id: 'diff', label: 'Container Version Diff' },
             ] as const
           ).map((tab) => (
             <button
@@ -232,7 +243,7 @@ export const GtmAuditor: React.FC<GtmAuditorProps> = ({
           ))}
         </div>
 
-        {subTab !== 'monitor' && (
+        {subTab !== 'monitor' && subTab !== 'scraper' && subTab !== 'diff' && (
           <div className="flex items-center gap-2.5">
             {subTab === 'findings' && (
               <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
@@ -507,6 +518,12 @@ export const GtmAuditor: React.FC<GtmAuditorProps> = ({
       {subTab === 'monitor' && (
         <TriggerFiringMonitor container={container} isDark={isDark} />
       )}
+
+      {/* Implementation Scraper */}
+      {subTab === 'scraper' && <ImplementationScraper />}
+
+      {/* Container Version Diff */}
+      {subTab === 'diff' && <ContainerVersionDiff currentContainer={container} />}
 
       {/* Paste GTM JSON Modal */}
       {showPasteModal && (

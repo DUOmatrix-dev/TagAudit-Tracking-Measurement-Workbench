@@ -16,6 +16,7 @@ import {
   Copy,
   Download,
   FileCode2,
+  FileJson,
   GitBranch,
   XCircle,
 } from 'lucide-react';
@@ -166,9 +167,9 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
   isDark,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<'All' | ParamDependencyCategory>('All');
-  const [docTab, setDocTab] = useState<'matrix' | 'mermaid' | 'markdown'>('matrix');
+  const [docTab, setDocTab] = useState<'matrix' | 'json_schema' | 'mermaid' | 'markdown'>('matrix');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [copiedType, setCopiedType] = useState<'mermaid' | 'markdown' | null>(null);
+  const [copiedType, setCopiedType] = useState<'json_schema' | 'mermaid' | 'markdown' | null>(null);
 
   const schema = useMemo(
     () => generateTaxonomyVisualSchema(events, { isDark }),
@@ -210,8 +211,13 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
   const selectedNode =
     schema.nodes.find((n) => n.id === selectedNodeId) || null;
 
-  const handleCopyDoc = (kind: 'mermaid' | 'markdown') => {
-    const content = kind === 'mermaid' ? schema.mermaidDiagram : schema.markdownDoc;
+  const handleCopyDoc = (kind: 'json_schema' | 'mermaid' | 'markdown') => {
+    const content =
+      kind === 'json_schema'
+        ? schema.jsonSchema
+        : kind === 'mermaid'
+          ? schema.mermaidDiagram
+          : schema.markdownDoc;
     navigator.clipboard.writeText(content);
     setCopiedType(kind);
     setTimeout(() => setCopiedType(null), 1800);
@@ -254,6 +260,20 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() =>
+                handleDownloadFile(
+                  schema.jsonSchema,
+                  'ga4-taxonomy.schema.json',
+                  'application/schema+json;charset=utf-8'
+                )
+              }
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <FileJson className="w-3.5 h-3.5" />
+              Download JSON Schema
+            </button>
             <button
               type="button"
               onClick={() =>
@@ -385,10 +405,11 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
       {/* Documentation Spec & Export Section */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start">
+          <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start">
             {(
               [
                 { id: 'matrix', label: `Parameter Dependency Matrix (${schema.parameters.length})` },
+                { id: 'json_schema', label: 'JSON Schema (2020-12)' },
                 { id: 'mermaid', label: 'Mermaid Diagram' },
                 { id: 'markdown', label: 'Markdown Tech Spec' },
               ] as const
@@ -412,7 +433,7 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
             <button
               type="button"
               onClick={() => handleCopyDoc(docTab)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 cursor-pointer self-start sm:self-auto"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 cursor-pointer self-start sm:self-auto whitespace-nowrap shrink-0"
             >
               {copiedType === docTab ? (
                 <Check className="w-3.5 h-3.5" />
@@ -421,9 +442,11 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
               )}
               {copiedType === docTab
                 ? 'Copied to Clipboard'
-                : docTab === 'mermaid'
-                  ? 'Copy Mermaid'
-                  : 'Copy Markdown'}
+                : docTab === 'json_schema'
+                  ? 'Copy JSON Schema'
+                  : docTab === 'mermaid'
+                    ? 'Copy Mermaid'
+                    : 'Copy Markdown'}
             </button>
           )}
         </div>
@@ -479,6 +502,14 @@ export const TaxonomySchemaView: React.FC<TaxonomySchemaViewProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {docTab === 'json_schema' && (
+          <div className="p-4">
+            <pre className="p-4 bg-slate-950 text-slate-100 border border-slate-800 rounded-md text-xs font-mono overflow-x-auto max-h-96">
+              {schema.jsonSchema}
+            </pre>
           </div>
         )}
 

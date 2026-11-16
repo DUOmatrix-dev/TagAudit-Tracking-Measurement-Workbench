@@ -4,6 +4,7 @@ import {
   Code2,
   Copy,
   Download,
+  FileJson,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -14,7 +15,9 @@ import {
   TaxonomyEvent,
 } from '../types/tracking';
 import { generateDataLayerSnippet } from '../utils/cryptoAndPayloads';
+import { generateTaxonomyJsonSchema } from '../utils/taxonomySchema';
 import { TaxonomySchemaView } from './TaxonomySchemaView';
+import { TaxonomyContractGenerator } from './TaxonomyContractGenerator';
 
 interface TaxonomyPlannerProps {
   events: TaxonomyEvent[];
@@ -34,7 +37,7 @@ export const TaxonomyPlanner: React.FC<TaxonomyPlannerProps> = ({
   isDark = false,
   onChangeEvents,
 }) => {
-  const [viewMode, setViewMode] = useState<'matrix' | 'schema'>('matrix');
+  const [viewMode, setViewMode] = useState<'matrix' | 'schema' | 'contract'>('matrix');
   const [stageFilter, setStageFilter] = useState<'All' | FunnelStage>('All');
   const [selectedId, setSelectedId] = useState<string>(events[0]?.id || '');
   const [copied, setCopied] = useState(false);
@@ -185,6 +188,19 @@ export const TaxonomyPlanner: React.FC<TaxonomyPlannerProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadJsonSchema = () => {
+    const schemaDoc = generateTaxonomyJsonSchema(events);
+    const blob = new Blob([JSON.stringify(schemaDoc, null, 2)], {
+      type: 'application/schema+json;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ga4-taxonomy.schema.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -197,7 +213,15 @@ export const TaxonomyPlanner: React.FC<TaxonomyPlannerProps> = ({
             Define Google Ads primary/secondary bidding hierarchy, data-driven attribution, parameter completeness ({avgCompleteness}%), and developer dataLayer specs.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleDownloadJsonSchema}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <FileJson className="w-3.5 h-3.5" />
+            Download JSON Schema
+          </button>
           <button
             type="button"
             onClick={handleExportCsv}
@@ -293,6 +317,17 @@ export const TaxonomyPlanner: React.FC<TaxonomyPlannerProps> = ({
           >
             Visual Schema &amp; Dependencies
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('contract')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              viewMode === 'contract'
+                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+            }`}
+          >
+            TS / JSON Test Schema
+          </button>
         </div>
 
         {viewMode === 'matrix' && (
@@ -319,6 +354,8 @@ export const TaxonomyPlanner: React.FC<TaxonomyPlannerProps> = ({
 
       {viewMode === 'schema' ? (
         <TaxonomySchemaView events={events} isDark={isDark} />
+      ) : viewMode === 'contract' ? (
+        <TaxonomyContractGenerator events={events} />
       ) : (
         /* Main Split: Taxonomy Matrix + DataLayer Code Preview */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

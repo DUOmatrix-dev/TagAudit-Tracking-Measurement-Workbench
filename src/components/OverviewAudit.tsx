@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  LayoutDashboard,
+  Workflow,
   XCircle,
 } from 'lucide-react';
 import {
@@ -13,6 +15,7 @@ import {
 import { DataFlowDiagram } from './DataFlowDiagram';
 import { AttributionInsights } from './AttributionInsights';
 import { PlatformUpdatesPanel } from './PlatformUpdatesPanel';
+import { LinkAnalyzer } from './LinkAnalyzer';
 
 interface OverviewAuditProps {
   workspace: MeasurementWorkspace;
@@ -31,6 +34,7 @@ export const OverviewAudit: React.FC<OverviewAuditProps> = ({
   onNavigate,
   onPatchGtm,
 }) => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'data-flow'>('overview');
   const primaryDiscrepancy = workspace.discrepancies[0];
   const maxDeltaPct = primaryDiscrepancy
     ? Math.max(
@@ -105,8 +109,46 @@ export const OverviewAudit: React.FC<OverviewAuditProps> = ({
         </div>
       </div>
 
-      {/* 4-Column KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Section Sub-Navigation Tabs */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={() => setActiveTab('overview')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer -mb-px ${
+            activeTab === 'overview'
+              ? 'border-orange-600 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard className="w-3.5 h-3.5" />
+          Audit Overview
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('data-flow')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer -mb-px ${
+            activeTab === 'data-flow'
+              ? 'border-orange-600 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <Workflow className="w-3.5 h-3.5" />
+          Data Flow
+        </button>
+      </div>
+
+      {activeTab === 'data-flow' ? (
+        <DataFlowDiagram
+          workspace={workspace}
+          gtmSummary={gtmSummary}
+          taxonomy={taxonomy}
+          isDark={isDark}
+          onNavigate={onNavigate}
+        />
+      ) : (
+        <>
+          {/* 4-Column KPI Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>Platform Discrepancy</span>
@@ -225,14 +267,8 @@ export const OverviewAudit: React.FC<OverviewAuditProps> = ({
         </div>
       </div>
 
-      {/* Visual Data Flow Diagram (React Flow) */}
-      <DataFlowDiagram
-        workspace={workspace}
-        gtmSummary={gtmSummary}
-        taxonomy={taxonomy}
-        isDark={isDark}
-        onNavigate={onNavigate}
-      />
+      {/* Link & Page Tracking Analyzer */}
+      <LinkAnalyzer />
 
       {/* Attribution Insights User Conversion Path Heatmap (Recharts) */}
       <AttributionInsights workspace={workspace} isDark={isDark} />
@@ -422,6 +458,8 @@ export const OverviewAudit: React.FC<OverviewAuditProps> = ({
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
